@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../screens/single_image_view.dart';
 
 class GalleryScreen extends StatefulWidget {
   const GalleryScreen({Key? key}) : super(key: key);
@@ -38,6 +39,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
         .map((f) => File(f.path))
         .toList();
 
+    // 이미지 파일을 최신순(내림차순)으로 정렬
+    images.sort((a, b) {
+      final aStat = a.statSync();
+      final bStat = b.statSync();
+      return bStat.modified.compareTo(aStat.modified); // 내림차순으로 비교
+    });
+
     setState(() {
       _images = images;
       _loading = false;
@@ -61,7 +69,20 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     crossAxisSpacing: 4,
                   ),
                   itemBuilder: (context, index) {
-                    return Image.file(_images[index], fit: BoxFit.cover);
+                    return GestureDetector(
+                      onTap: () {
+                        // 이미지 선택 시 SingleImageView로 이동
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => SingleImageView(
+                              imageFile: _images[index],
+                            ),
+                          ),
+                        );
+                      },
+                      child: Image.file(_images[index], fit: BoxFit.cover),
+                    );
                   },
                 ),
     );
