@@ -1,0 +1,2 @@
+C:/Project/Flutter-Fastapi-Demo/Flutter/android/app/.cxx/RelWithDebInfo/6v6o3xk1/x86/CMakeFiles/edit_cache.dir
+C:/Project/Flutter-Fastapi-Demo/Flutter/android/app/.cxx/RelWithDebInfo/6v6o3xk1/x86/CMakeFiles/rebuild_cache.dir

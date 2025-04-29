@@ -1,0 +1,2 @@
+C:/Users/user/kwak-21/Flutter/ArtChemy/android/app/.cxx/Debug/476d6m5l/armeabi-v7a/CMakeFiles/edit_cache.dir
+C:/Users/user/kwak-21/Flutter/ArtChemy/android/app/.cxx/Debug/476d6m5l/armeabi-v7a/CMakeFiles/rebuild_cache.dir
