@@ -193,66 +193,73 @@ class _GalleryScreenState extends State<GalleryScreen> {
           ? _buildLoadingIndicator()
           : _images.isEmpty
               ? _buildEmptyGallery()
-              : GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(4, 4, 4, 80),
-                  physics: BouncingScrollPhysics(),
-                  itemCount: _images.length,
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    mainAxisSpacing: 4,
-                    crossAxisSpacing: 4,
-                    childAspectRatio: 1.0,
-                  ),
-                  itemBuilder: (context, index) {
-                    return GestureDetector(
-                      onTap: () {
-                        // 이미지 선택 시 SingleImageView로 이동
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                SingleImageView(imageFile: _images[index]),
-                          ),
-                        );
-                      },
-                      child: Hero(
-                        tag: 'gallery_image_${_images[index].path}',
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
-                                blurRadius: 2,
-                                offset: Offset(0, 1),
+              : RefreshIndicator(
+                  onRefresh: _loadImagesFromCustomFolder,
+                  child: GridView.builder(
+                    padding: const EdgeInsets.fromLTRB(4, 4, 4, 80),
+                    physics:
+                        const AlwaysScrollableScrollPhysics(), // 스크롤이 없을 때도 새로고침 가능
+                    itemCount: _images.length,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      mainAxisSpacing: 4,
+                      crossAxisSpacing: 4,
+                      childAspectRatio: 1.0,
+                    ),
+                    itemBuilder: (context, index) {
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => SingleImageView(
+                                imageFiles: _images,
+                                initialIndex: index,
                               ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.file(
-                              _images[index],
-                              fit: BoxFit.cover,
-                              cacheHeight: 300, // 성능 최적화
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  color: Colors.grey.shade100,
-                                  child: Center(
-                                    child: Icon(
-                                      Icons.broken_image_rounded,
-                                      color: _accentColor,
-                                      size: 24,
+                            ),
+                          );
+                        },
+                        child: Hero(
+                          tag: 'gallery_image_${_images[index].path}',
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 2,
+                                  offset: Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.file(
+                                _images[index],
+                                fit: BoxFit.cover,
+                                cacheHeight: 300,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    color: Colors.grey.shade100,
+                                    child: Center(
+                                      child: Icon(
+                                        Icons.broken_image_rounded,
+                                        color: _accentColor,
+                                        size: 24,
+                                      ),
                                     ),
-                                  ),
-                                );
-                              },
+                                  );
+                                },
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
+
       // 하단 정보 표시줄
       bottomNavigationBar: Container(
         height: 60,

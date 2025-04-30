@@ -54,6 +54,15 @@ class _CameraScreenState extends State<CameraScreen>
   FlashMode _flashMode = FlashMode.off;
   CameraAspectRatio _currentAspectRatio = CameraAspectRatio.full;
 
+  // 미리 정의된 줌 레벨 단계
+  final List<double> _zoomLevels = [1.0, 1.5, 2.0, 3.0, 4.0, 5.0];
+  int _currentZoomIndex = 0;
+
+  // 핀치 줌 관련 변수
+  double _baseScale = 1.0;
+  double _minAvailableZoom = 1.0;
+  double _maxAvailableZoom = 5.0;
+
   final Color _primaryColor = Color(0xFF2C3E50);
   final Color _accentColor = Color(0xFF3498DB);
   final Color _backgroundColor = Colors.black;
@@ -73,13 +82,12 @@ class _CameraScreenState extends State<CameraScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // RouteObserver 등록
     routeObserver.subscribe(this, ModalRoute.of(context)! as PageRoute);
   }
 
   @override
   void dispose() {
-    routeObserver.unsubscribe(this); // RouteObserver 해제
+    routeObserver.unsubscribe(this);
     _controller.dispose();
     _zoomDisplayTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
@@ -88,7 +96,6 @@ class _CameraScreenState extends State<CameraScreen>
 
   @override
   void didPopNext() {
-    // 갤러리 등에서 다시 돌아왔을 때
     _initCamera();
   }
 
@@ -110,13 +117,49 @@ class _CameraScreenState extends State<CameraScreen>
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.jpeg,
     );
-    _initializeControllerFuture = _controller.initialize();
+    _initializeControllerFuture = _controller.initialize().then((_) async {
+      try {
+        await _controller.setFlashMode(_flashMode);
+        // 카메라 초기화 후 최대/최소 줌 레벨 얻기
+        _minAvailableZoom = await _controller.getMinZoomLevel();
+        _maxAvailableZoom = await _controller.getMaxZoomLevel();
+      } catch (e) {
+        print("초기 카메라 설정 실패: $e");
+      }
+      // 현재 줌 레벨 초기화
+      _currentZoomLevel = _minAvailableZoom;
+      _currentZoomIndex = 0;
+
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> _requestPermissions() async {
     await Permission.camera.request();
     await Permission.storage.request();
     await Permission.photos.request();
+  }
+
+  // 터치로 줌 레벨 변경하는 함수
+  void _toggleZoomLevel() {
+    _currentZoomIndex = (_currentZoomIndex + 1) % _zoomLevels.length;
+    _setZoomLevel(_zoomLevels[_currentZoomIndex]);
+  }
+
+  // 줌 레벨 설정 함수
+  Future<void> _setZoomLevel(double zoomLevel) async {
+    // 최대/최소 범위 내로 조정
+    double safeZoom = zoomLevel.clamp(_minAvailableZoom, _maxAvailableZoom);
+
+    try {
+      await _controller.setZoomLevel(safeZoom);
+      setState(() {
+        _currentZoomLevel = safeZoom;
+        _displayZoomLevel();
+      });
+    } catch (e) {
+      print('줌 레벨 설정 실패: $e');
+    }
   }
 
   Future<void> _takePictureAndSave() async {
@@ -248,17 +291,39 @@ class _CameraScreenState extends State<CameraScreen>
 
     setState(() {
       _isRearCamera = !_isRearCamera;
-      _currentCamera = newCamera;
     });
 
-    await _controller.dispose();
-    _controller = CameraController(
-      _currentCamera,
-      ResolutionPreset.high,
-      enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.jpeg,
-    );
-    _initializeControllerFuture = _controller.initialize();
+    try {
+      // 기존 컨트롤러 safely dispose
+      if (_controller.value.isInitialized) {
+        await _controller.dispose();
+      }
+
+      _currentCamera = newCamera;
+      _controller = CameraController(
+        _currentCamera,
+        ResolutionPreset.high,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.jpeg,
+      );
+
+      _initializeControllerFuture = _controller.initialize().then((_) async {
+        try {
+          await _controller.setFlashMode(_flashMode);
+          _minAvailableZoom = await _controller.getMinZoomLevel();
+          _maxAvailableZoom = await _controller.getMaxZoomLevel();
+
+          // 줌 레벨 초기화
+          _currentZoomLevel = _minAvailableZoom;
+          _currentZoomIndex = 0;
+        } catch (e) {
+          print("카메라 전환 후 설정 실패: $e");
+        }
+        if (mounted) setState(() {});
+      });
+    } catch (e) {
+      print("카메라 전환 실패: $e");
+    }
   }
 
   Widget _buildZoomControl() {
@@ -284,15 +349,11 @@ class _CameraScreenState extends State<CameraScreen>
                 ),
                 child: Slider(
                   value: _currentZoomLevel,
-                  min: 1.0,
-                  max: 5.0,
+                  min: _minAvailableZoom,
+                  max: _maxAvailableZoom,
                   divisions: 8,
                   onChanged: (double value) {
-                    setState(() {
-                      _currentZoomLevel = value;
-                      _controller.setZoomLevel(_currentZoomLevel);
-                      _displayZoomLevel();
-                    });
+                    _setZoomLevel(value);
                   },
                 ),
               ),
@@ -311,9 +372,11 @@ class _CameraScreenState extends State<CameraScreen>
 
     _zoomDisplayTimer?.cancel();
     _zoomDisplayTimer = Timer(Duration(seconds: 2), () {
-      setState(() {
-        _zoomDisplay = null;
-      });
+      if (mounted) {
+        setState(() {
+          _zoomDisplay = null;
+        });
+      }
     });
   }
 
@@ -373,41 +436,86 @@ class _CameraScreenState extends State<CameraScreen>
             icon: Icon(
               _flashMode == FlashMode.off
                   ? Icons.flash_off_rounded
-                  : Icons.flash_on_rounded,
+                  : _flashMode == FlashMode.auto
+                      ? Icons.flash_auto_rounded
+                      : Icons.flash_on_rounded,
               color: _iconColor,
             ),
-            onPressed: () {
-              setState(() {
-                _flashMode = _flashMode == FlashMode.off
-                    ? FlashMode.auto
-                    : FlashMode.off;
-              });
-            },
+            onPressed: _controller.description.lensDirection ==
+                    CameraLensDirection.front
+                ? null // 전면 카메라는 비활성화
+                : () async {
+                    setState(() {
+                      _flashMode = _flashMode == FlashMode.off
+                          ? FlashMode.auto
+                          : _flashMode == FlashMode.auto
+                              ? FlashMode.always
+                              : FlashMode.off;
+                    });
+
+                    try {
+                      await _controller.setFlashMode(_flashMode);
+                    } catch (e) {
+                      print("플래시 설정 실패: $e");
+                    }
+                  },
           ),
-          // 카메라 비율 전환 버튼
-          PopupMenuButton<CameraAspectRatio>(
-            icon: Icon(Icons.aspect_ratio_rounded, color: _iconColor),
-            onSelected: (CameraAspectRatio ratio) {
-              setState(() {
-                _currentAspectRatio = ratio;
-              });
-            },
-            itemBuilder: (BuildContext context) =>
-                <PopupMenuEntry<CameraAspectRatio>>[
-              const PopupMenuItem<CameraAspectRatio>(
-                value: CameraAspectRatio.ratio_1_1,
-                child: Text('1:1'),
-              ),
-              const PopupMenuItem<CameraAspectRatio>(
-                value: CameraAspectRatio.ratio_9_16,
-                child: Text('9:16'),
-              ),
-              const PopupMenuItem<CameraAspectRatio>(
-                value: CameraAspectRatio.full,
-                child: Text('Full'),
-              ),
-            ],
+
+          // 카메라 비율 순환 버튼
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.black45,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _currentAspectRatio.displayTitle,
+                  style: TextStyle(
+                    color: _iconColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                SizedBox(width: 4),
+                IconButton(
+                  iconSize: 22,
+                  padding: EdgeInsets.zero,
+                  constraints: BoxConstraints(),
+                  icon: Icon(Icons.aspect_ratio_rounded, color: _iconColor),
+                  onPressed: () {
+                    setState(() {
+                      // 비율 리스트와 현재 인덱스
+                      final allRatios = CameraAspectRatio.values;
+                      final currentIndex =
+                          allRatios.indexOf(_currentAspectRatio);
+                      final nextIndex = (currentIndex + 1) % allRatios.length;
+                      _currentAspectRatio = allRatios[nextIndex];
+                    });
+
+                    // 화면에 비율 변경 정보 표시
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                            "비율이 ${_currentAspectRatio.displayTitle}로 변경되었습니다"),
+                        backgroundColor: _accentColor,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        margin: EdgeInsets.all(20.0),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
+
           SizedBox(width: 16),
         ],
       ),
@@ -418,13 +526,37 @@ class _CameraScreenState extends State<CameraScreen>
             return Stack(
               fit: StackFit.expand,
               children: [
-                AspectRatio(
-                  aspectRatio: _controller.value.previewSize!.height /
-                      _controller.value.previewSize!.width,
-                  child: CameraPreview(_controller),
+                // 카메라 프리뷰에 제스처 감지 추가
+                GestureDetector(
+                  onTap: () {
+                    // 화면 탭했을 때 줌 레벨 토글
+                    _toggleZoomLevel();
+                  },
+                  onDoubleTap: () {
+                    // 더블 탭시 줌 초기화
+                    _setZoomLevel(_minAvailableZoom);
+                    _currentZoomIndex = 0;
+                  },
+                  // 핀치 줌 구현
+                  onScaleStart: (ScaleStartDetails details) {
+                    _baseScale = _currentZoomLevel;
+                  },
+                  onScaleUpdate: (ScaleUpdateDetails details) {
+                    // 핀치 줌 처리
+                    if (details.scale != 1.0) {
+                      double newZoom = (_baseScale * details.scale)
+                          .clamp(_minAvailableZoom, _maxAvailableZoom);
+                      _setZoomLevel(newZoom);
+                    }
+                  },
+                  child: AspectRatio(
+                    aspectRatio: _controller.value.previewSize!.height /
+                        _controller.value.previewSize!.width,
+                    child: CameraPreview(_controller),
+                  ),
                 ),
 
-                // ✅ 촬영 영역 외 마스크 추가
+                // 촬영 영역 외 마스크 추가
                 _buildAspectRatioMask(screenSize),
 
                 // 줌 배율 표시 (일시적)

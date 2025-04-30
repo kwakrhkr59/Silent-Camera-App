@@ -1,14 +1,27 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
-class SingleImageView extends StatelessWidget {
-  final File imageFile;
+class SingleImageView extends StatefulWidget {
+  final List<File> imageFiles;
+  final int initialIndex;
 
-  const SingleImageView({Key? key, required this.imageFile}) : super(key: key);
+  const SingleImageView({
+    Key? key,
+    required this.imageFiles,
+    required this.initialIndex,
+  }) : super(key: key);
 
-  // 밝은 테마로 컬러 팔레트 정의
+  @override
+  State<SingleImageView> createState() => _SingleImageViewState();
+}
+
+class _SingleImageViewState extends State<SingleImageView> {
+  late PageController _pageController;
+  late int _currentIndex;
+
   static const Color _primaryColor = Color(0xFF3498DB);
   static const Color _secondaryColor = Color(0xFF4A90E2);
   static const Color _backgroundColor = Colors.white;
@@ -17,11 +30,29 @@ class SingleImageView extends StatelessWidget {
   static const Color _buttonColor = Color(0xFF3498DB);
   static const Color _errorColor = Color(0xFFE74C3C);
 
-  void _shareImage() {
-    Share.shareXFiles([XFile(imageFile.path)], text: '내 사진 공유하기');
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: _currentIndex);
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ));
   }
 
-  void _deleteImage(BuildContext context) async {
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _shareImage() {
+    Share.shareXFiles([XFile(widget.imageFiles[_currentIndex].path)],
+        text: '내 사진 공유하기');
+  }
+
+  void _deleteImage() async {
     final confirm = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black38,
@@ -30,7 +61,7 @@ class SingleImageView extends StatelessWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
-        title: Text(
+        title: const Text(
           '삭제 확인',
           style: TextStyle(
             color: _textColor,
@@ -51,7 +82,7 @@ class SingleImageView extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            child: Text('취소'),
+            child: const Text('취소'),
             onPressed: () => Navigator.of(context).pop(false),
           ),
           ElevatedButton(
@@ -63,7 +94,7 @@ class SingleImageView extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
             ),
-            child: Text('삭제'),
+            child: const Text('삭제'),
             onPressed: () => Navigator.of(context).pop(true),
           ),
         ],
@@ -72,65 +103,55 @@ class SingleImageView extends StatelessWidget {
 
     if (confirm == true) {
       try {
-        await imageFile.delete();
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('사진이 삭제되었습니다'),
-              backgroundColor: _secondaryColor,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              margin: EdgeInsets.all(16),
-            ),
-          );
-          Navigator.of(context).pop(); // 이전 화면으로 돌아감
+        final file = widget.imageFiles[_currentIndex];
+        await file.delete();
+        setState(() {
+          widget.imageFiles.removeAt(_currentIndex);
+          if (_currentIndex >= widget.imageFiles.length && _currentIndex > 0) {
+            _currentIndex--;
+          }
+        });
+        if (widget.imageFiles.isEmpty) {
+          Navigator.of(context).pop();
+        } else {
+          _pageController.jumpToPage(_currentIndex);
         }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('사진이 삭제되었습니다'),
+            backgroundColor: _secondaryColor,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
       } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('삭제 실패: $e'),
-              backgroundColor: _errorColor,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              margin: EdgeInsets.all(16),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('삭제 실패: $e'),
+            backgroundColor: _errorColor,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
             ),
-          );
-        }
+            margin: const EdgeInsets.all(16),
+          ),
+        );
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // 파일 정보 가져오기
-    final fileInfo = imageFile.statSync();
-    final fileDate = fileInfo.modified;
-    final fileSize = (fileInfo.size / 1024).toStringAsFixed(1) + ' KB';
-
-    // 파일 이름 가져오기
-    final fileName = imageFile.path.split('/').last;
-
-    // 이미지 로드 시간 측정을 위한 DateTime
-    final startTime = DateTime.now();
-
-    // 상태 표시줄 설정
-    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-    ));
-
     return Scaffold(
       backgroundColor: _backgroundColor,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.white.withOpacity(0.95),
-        title: Text(
+        title: const Text(
           '이미지 보기',
           style: TextStyle(
             color: _textColor,
@@ -152,56 +173,55 @@ class SingleImageView extends StatelessWidget {
           IconButton(
             icon: Icon(Icons.delete_outline_rounded, color: _errorColor),
             tooltip: '삭제하기',
-            onPressed: () => _deleteImage(context),
+            onPressed: _deleteImage,
           ),
-          SizedBox(width: 8),
+          const SizedBox(width: 8),
         ],
         systemOverlayStyle: SystemUiOverlayStyle.dark,
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: Container(
-              color: Colors.black12, // 약간의 배경색상 추가
+      body: Expanded(
+        // PageView.builder를 Expanded로 감싸줍니다.
+        child: PageView.builder(
+          controller: _pageController,
+          itemCount: widget.imageFiles.length,
+          onPageChanged: (index) {
+            setState(() {
+              _currentIndex = index;
+            });
+          },
+          itemBuilder: (context, index) {
+            final imageFile = widget.imageFiles[index];
+            return Center(
               child: Hero(
                 tag: 'gallery_image_${imageFile.path}',
-                child: InteractiveViewer(
-                  minScale: 0.5,
-                  maxScale: 4.0,
-                  boundaryMargin: const EdgeInsets.all(20.0),
-                  child: Image.file(
-                    imageFile,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.broken_image_rounded,
-                              size: 64,
-                              color: _errorColor.withOpacity(0.7),
-                            ),
-                            SizedBox(height: 16),
-                            Text(
-                              '이미지를 불러올 수 없습니다',
-                              style: TextStyle(
-                                color: _textColor,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
+                child: Image.file(
+                  imageFile,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.broken_image_rounded,
+                          size: 64,
+                          color: _errorColor.withOpacity(0.7),
                         ),
-                      );
-                    },
+                        const SizedBox(height: 16),
+                        const Text(
+                          '이미지를 불러올 수 없습니다',
+                          style: TextStyle(
+                            color: _textColor,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-          // 안전 영역 확보
-          // SizedBox(height: MediaQuery.of(context).padding.bottom),
-        ],
+            );
+          },
+        ),
       ),
     );
   }

@@ -21,7 +21,8 @@ class MyApp extends StatelessWidget {
       title: '무음 카메라',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(primarySwatch: Colors.blue),
-      home: SplashScreen(camera: camera),
+      // home: SplashScreen(camera: camera),
+      home: CameraScreen(camera: camera),
       navigatorObservers: [routeObserver],
     );
   }
