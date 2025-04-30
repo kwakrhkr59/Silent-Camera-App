@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import '../services/storage_service.dart';
 import '../services/save_image.dart';
 import '../screens/gallery_screen.dart';
+import '../main.dart';
 
 enum CameraAspectRatio {
   ratio_1_1,
@@ -41,7 +42,7 @@ class CameraScreen extends StatefulWidget {
 }
 
 class _CameraScreenState extends State<CameraScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, RouteAware {
   late CameraController _controller;
   late Future<void> _initializeControllerFuture;
   double _currentZoomLevel = 1.0;
@@ -70,11 +71,25 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // RouteObserver 등록
+    routeObserver.subscribe(this, ModalRoute.of(context)! as PageRoute);
+  }
+
+  @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
+    routeObserver.unsubscribe(this); // RouteObserver 해제
     _controller.dispose();
     _zoomDisplayTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    // 갤러리 등에서 다시 돌아왔을 때
+    _initCamera();
   }
 
   @override
