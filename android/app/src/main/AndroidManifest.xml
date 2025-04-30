@@ -9,7 +9,7 @@
 
 
     <application
-        android:label="ArtChemy"
+        android:label="Silent Camera"
         android:name="${applicationName}"
         android:requestLegacyExternalStorage="true"
         android:icon="@mipmap/ic_launcher">

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'package:image/image.dart' as img;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/storage_service.dart';
@@ -11,6 +12,7 @@ import '../screens/gallery_screen.dart';
 
 enum CameraAspectRatio {
   ratio_1_1,
+  ratio_3_4,
   ratio_9_16,
   full,
 }
@@ -20,6 +22,8 @@ extension CameraAspectRatioExtension on CameraAspectRatio {
     switch (this) {
       case CameraAspectRatio.ratio_1_1:
         return '1:1';
+      case CameraAspectRatio.ratio_3_4:
+        return '3:4';
       case CameraAspectRatio.ratio_9_16:
         return '9:16';
       case CameraAspectRatio.full:
@@ -49,7 +53,6 @@ class _CameraScreenState extends State<CameraScreen>
   FlashMode _flashMode = FlashMode.off;
   CameraAspectRatio _currentAspectRatio = CameraAspectRatio.full;
 
-  // 컬러 팔레트 정의
   final Color _primaryColor = Color(0xFF2C3E50);
   final Color _accentColor = Color(0xFF3498DB);
   final Color _backgroundColor = Colors.black;
@@ -110,13 +113,68 @@ class _CameraScreenState extends State<CameraScreen>
 
     try {
       await _initializeControllerFuture;
-
-      await _controller.setFlashMode(_flashMode); // 현재 플래시 모드 적용
+      await _controller.setFlashMode(_flashMode);
 
       final XFile picture = await _controller.takePicture();
       final Uint8List bytes = await File(picture.path).readAsBytes();
+      final originalImage = img.decodeImage(bytes);
+
+      if (originalImage == null) throw Exception("이미지 디코딩 실패");
+
+      final previewSize = _controller.value.previewSize;
+      img.Image image = originalImage;
+
+      final int width = image.width;
+      final int height = image.height;
+      img.Image croppedImage = image;
+
+      switch (_currentAspectRatio) {
+        case CameraAspectRatio.ratio_1_1:
+          final int size = width < height ? width : height;
+          croppedImage = img.copyCrop(
+            image,
+            x: (width - size) ~/ 2,
+            y: (height - size) ~/ 2,
+            width: size,
+            height: size,
+          );
+          break;
+
+        case CameraAspectRatio.ratio_3_4:
+          final targetHeight = (width * 4 / 3).toInt();
+          if (targetHeight <= height) {
+            croppedImage = img.copyCrop(
+              image,
+              x: 0,
+              y: (height - targetHeight) ~/ 2,
+              width: width,
+              height: targetHeight,
+            );
+          }
+          break;
+
+        case CameraAspectRatio.ratio_9_16:
+          final targetHeight = (width * 16 / 9).toInt();
+          if (targetHeight <= height) {
+            croppedImage = img.copyCrop(
+              image,
+              x: 0,
+              y: (height - targetHeight) ~/ 2,
+              width: width,
+              height: targetHeight,
+            );
+          }
+          break;
+
+        case CameraAspectRatio.full:
+          break;
+      }
+
+      final Uint8List croppedBytes =
+          Uint8List.fromList(img.encodeJpg(croppedImage));
       final fileName = 'photo_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final result = await ImageSaver.saveImageToGallery(bytes, fileName);
+      final result =
+          await ImageSaver.saveImageToGallery(croppedBytes, fileName);
 
       if (result != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -244,6 +302,33 @@ class _CameraScreenState extends State<CameraScreen>
     });
   }
 
+  Widget _buildAspectRatioMask(Size screenSize) {
+    double previewHeight;
+    switch (_currentAspectRatio) {
+      case CameraAspectRatio.ratio_1_1:
+        previewHeight = screenSize.width; // 정사각형
+        break;
+      case CameraAspectRatio.ratio_3_4:
+        previewHeight = screenSize.width * 4 / 3;
+        break;
+      case CameraAspectRatio.ratio_9_16:
+        previewHeight = screenSize.width * 16 / 9;
+        break;
+      case CameraAspectRatio.full:
+      default:
+        return SizedBox.shrink(); // full일 땐 마스크 없음
+    }
+
+    double topMaskHeight = (screenSize.height - previewHeight) / 2;
+    return Column(
+      children: [
+        Container(height: topMaskHeight, color: Colors.black.withOpacity(0.5)),
+        Expanded(child: Container(color: Colors.transparent)),
+        Container(height: topMaskHeight, color: Colors.black.withOpacity(0.5)),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
@@ -267,17 +352,6 @@ class _CameraScreenState extends State<CameraScreen>
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text(
-          '무음 카메라',
-          style: TextStyle(
-            color: _iconColor,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, color: _iconColor),
-          onPressed: () => Navigator.pop(context),
-        ),
         actions: [
           // 플래시 버튼
           IconButton(
@@ -329,23 +403,14 @@ class _CameraScreenState extends State<CameraScreen>
             return Stack(
               fit: StackFit.expand,
               children: [
-                // 카메라 미리보기 (화면 비율 조정)
                 AspectRatio(
-                  aspectRatio: aspectRatioValue,
-                  child: GestureDetector(
-                    onScaleUpdate: (details) {
-                      if (details.scale != 1.0) {
-                        final newZoomLevel = _currentZoomLevel * details.scale;
-                        setState(() {
-                          _currentZoomLevel = newZoomLevel.clamp(1.0, 5.0);
-                          _controller.setZoomLevel(_currentZoomLevel);
-                          _displayZoomLevel();
-                        });
-                      }
-                    },
-                    child: CameraPreview(_controller),
-                  ),
+                  aspectRatio: _controller.value.previewSize!.height /
+                      _controller.value.previewSize!.width,
+                  child: CameraPreview(_controller),
                 ),
+
+                // ✅ 촬영 영역 외 마스크 추가
+                _buildAspectRatioMask(screenSize),
 
                 // 줌 배율 표시 (일시적)
                 if (_zoomDisplay != null)
