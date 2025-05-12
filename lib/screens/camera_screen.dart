@@ -420,13 +420,19 @@ class _CameraScreenState extends State<CameraScreen>
         break;
       case CameraAspectRatio.full:
       default:
-        aspectRatioValue = screenSize.width / screenSize.height;
+        aspectRatioValue = _controller.value.isInitialized &&
+                _controller.value.previewSize != null
+            ? _controller.value.previewSize!.height /
+                _controller.value.previewSize!.width
+            : screenSize.width / screenSize.height;
+        // aspectRatioValue = screenSize.width / screenSize.height;
         break;
     }
 
     return Scaffold(
       backgroundColor: _backgroundColor,
       extendBodyBehindAppBar: true,
+      extendBody: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -464,10 +470,10 @@ class _CameraScreenState extends State<CameraScreen>
           // 카메라 비율 순환 버튼
           Container(
             padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: Colors.black45,
-              borderRadius: BorderRadius.circular(12),
-            ),
+            // decoration: BoxDecoration(
+            //   color: Colors.black45,
+            //   borderRadius: BorderRadius.circular(12),
+            // ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -528,15 +534,15 @@ class _CameraScreenState extends State<CameraScreen>
               children: [
                 // 카메라 프리뷰에 제스처 감지 추가
                 GestureDetector(
-                  onTap: () {
-                    // 화면 탭했을 때 줌 레벨 토글
-                    _toggleZoomLevel();
-                  },
-                  onDoubleTap: () {
-                    // 더블 탭시 줌 초기화
-                    _setZoomLevel(_minAvailableZoom);
-                    _currentZoomIndex = 0;
-                  },
+                  // onTap: () {
+                  //   // 화면 탭했을 때 줌 레벨 토글
+                  //   _toggleZoomLevel();
+                  // },
+                  // onDoubleTap: () {
+                  //   // 더블 탭시 줌 초기화
+                  //   _setZoomLevel(_minAvailableZoom);
+                  //   _currentZoomIndex = 0;
+                  // },
                   // 핀치 줌 구현
                   onScaleStart: (ScaleStartDetails details) {
                     _baseScale = _currentZoomLevel;
@@ -550,8 +556,9 @@ class _CameraScreenState extends State<CameraScreen>
                     }
                   },
                   child: AspectRatio(
-                    aspectRatio: _controller.value.previewSize!.height /
-                        _controller.value.previewSize!.width,
+                    aspectRatio: aspectRatioValue,
+                    // aspectRatio: _controller.value.previewSize!.height /
+                    //     _controller.value.previewSize!.width,
                     child: CameraPreview(_controller),
                   ),
                 ),
