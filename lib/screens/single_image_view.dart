@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:photo_view/photo_view.dart';
 
 class SingleImageView extends StatefulWidget {
   final List<File> imageFiles;
@@ -179,11 +180,11 @@ class _SingleImageViewState extends State<SingleImageView> {
         ],
         systemOverlayStyle: SystemUiOverlayStyle.dark,
       ),
-      body: Expanded(
-        // PageView.builder를 Expanded로 감싸줍니다.
+      body: SafeArea(
         child: PageView.builder(
           controller: _pageController,
           itemCount: widget.imageFiles.length,
+          padEnds: false,
           onPageChanged: (index) {
             setState(() {
               _currentIndex = index;
@@ -191,31 +192,31 @@ class _SingleImageViewState extends State<SingleImageView> {
           },
           itemBuilder: (context, index) {
             final imageFile = widget.imageFiles[index];
-            return Center(
-              child: Hero(
-                tag: 'gallery_image_${imageFile.path}',
-                child: Image.file(
-                  imageFile,
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) => Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.broken_image_rounded,
-                          size: 64,
-                          color: _errorColor.withOpacity(0.7),
+            return Hero(
+              tag: 'gallery_image_${imageFile.path}',
+              child: PhotoView(
+                imageProvider: FileImage(imageFile),
+                minScale: PhotoViewComputedScale.contained * 1.0,
+                maxScale: PhotoViewComputedScale.covered * 5.0,
+                gestureDetectorBehavior: HitTestBehavior.translucent,
+                errorBuilder: (context, error, stackTrace) => Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.broken_image_rounded,
+                        size: 64,
+                        color: _errorColor.withOpacity(0.7),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        '이미지를 불러올 수 없습니다',
+                        style: TextStyle(
+                          color: _textColor,
+                          fontSize: 16,
                         ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          '이미지를 불러올 수 없습니다',
-                          style: TextStyle(
-                            color: _textColor,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
